@@ -1,0 +1,344 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+}
+
+#game-container {
+    position: relative;
+}
+
+#game {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border-radius: 8px;
+    box-shadow: 0 0 40px rgba(100, 200, 255, 0.3);
+}
+
+#ui {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+#coins {
+    background: rgba(0,0,0,0.6);
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+#coin-icon {
+    font-size: 16px;
+}
+
+button {
+    background: rgba(100, 180, 255, 0.3);
+    border: 2px solid rgba(100, 180, 255, 0.6);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+button:hover {
+    background: rgba(100, 180, 255, 0.5);
+    transform: scale(1.05);
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: #2a2a4e;
+    padding: 25px;
+    border-radius: 16px;
+    max-width: 550px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    border: 2px solid rgba(100, 180, 255, 0.4);
+}
+
+.modal-content h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #7dd3fc;
+}
+
+.close-btn {
+    display: block;
+    margin: 20px auto 0;
+}
+
+#journal-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+}
+
+.fish-card {
+    background: rgba(0,0,0,0.3);
+    padding: 8px;
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.fish-card:hover {
+    transform: scale(1.05);
+}
+
+.fish-card.uncaught {
+    opacity: 0.4;
+    filter: grayscale(1);
+}
+
+.fish-card .fish-sprite {
+    font-size: 28px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fish-card .fish-name {
+    font-size: 10px;
+    margin-top: 3px;
+    color: #aaccff;
+}
+
+.fish-card .fish-count {
+    font-size: 9px;
+    color: #888;
+}
+
+#shop-items {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.shop-item {
+    background: rgba(0,0,0,0.3);
+    padding: 15px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.shop-item.owned {
+    opacity: 0.5;
+}
+
+.shop-item-info h3 {
+    color: #7dd3fc;
+    margin-bottom: 5px;
+}
+
+.shop-item-info p {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.shop-item button {
+    padding: 8px 20px;
+}
+
+#catch-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, #2a4a6e, #1a2a4e);
+    padding: 30px 50px;
+    border-radius: 16px;
+    text-align: center;
+    z-index: 200;
+    border: 3px solid #4a8ac0;
+    animation: popIn 0.3s ease-out;
+}
+
+#catch-popup.hidden {
+    display: none;
+}
+
+@keyframes popIn {
+    from {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+    }
+    to {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+#catch-content .fish-emoji {
+    font-size: 48px;
+    animation: bounce 0.5s ease infinite alternate;
+}
+
+#catch-content .fish-name {
+    font-size: 20px;
+    margin: 10px 0;
+    color: #7dd3fc;
+}
+
+#catch-content .fish-value {
+    color: #ffd700;
+    font-size: 14px;
+}
+
+#catch-content .fish-zone {
+    color: #88aacc;
+    font-size: 11px;
+    margin-bottom: 5px;
+}
+
+@keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-5px); }
+}
+
+#run-ui {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+#run-ui.hidden {
+    display: none;
+}
+
+#bait-display {
+    background: rgba(0,0,0,0.6);
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+}
+
+#bait-count {
+    color: #7dd3fc;
+    font-weight: bold;
+}
+
+#bait-select {
+    background: rgba(0,0,0,0.6);
+    border: 2px solid rgba(100, 180, 255, 0.4);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 15px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+#bait-select option {
+    background: #2a2a4e;
+}
+
+#end-run-btn {
+    background: rgba(255, 100, 100, 0.3);
+    border-color: rgba(255, 100, 100, 0.5);
+}
+
+#end-run-btn:hover {
+    background: rgba(255, 100, 100, 0.5);
+}
+
+#start-run-btn {
+    background: rgba(100, 255, 150, 0.3);
+    border-color: rgba(100, 255, 150, 0.5);
+}
+
+#start-run-btn:hover {
+    background: rgba(100, 255, 150, 0.5);
+}
+
+#start-run-btn.hidden {
+    display: none;
+}
+
+#summary-modal .summary-stats {
+    text-align: center;
+    margin: 20px 0;
+}
+
+#summary-modal .summary-stats p {
+    margin: 10px 0;
+    font-size: 16px;
+}
+
+#summary-modal .summary-stats span {
+    color: #7dd3fc;
+    font-weight: bold;
+}
+
+#bait-popup {
+    position: fixed;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #2a5a4e, #1a4a3e);
+    padding: 15px 25px;
+    border-radius: 12px;
+    color: #88ffaa;
+    font-size: 14px;
+    z-index: 150;
+    border: 2px solid #4a8a70;
+    animation: popIn 0.3s ease-out;
+}
+
+#bait-popup.hidden {
+    display: none;
+}
+
+.fish-card .fish-zones {
+    font-size: 8px;
+    color: #666;
+    margin-top: 3px;
+}
+
+.modal-content.summary {
+    text-align: center;
+}

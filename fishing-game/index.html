@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cozy Fishing Roguelite</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game"></canvas>
+        <div id="ui">
+            <div id="coins">
+                <span id="coin-icon">🪙</span>
+                <span id="coin-count">0</span>
+            </div>
+            <button id="journal-btn">📖 Journal</button>
+            <button id="shop-btn">🛒 Shop</button>
+            <button id="start-run-btn">🎣 Start Run</button>
+        </div>
+        
+        <div id="run-ui" class="hidden">
+            <div id="bait-display">
+                <span>Bait: </span>
+                <span id="bait-count">10</span>
+            </div>
+            <select id="bait-select"></select>
+            <button id="end-run-btn">End Run</button>
+        </div>
+    </div>
+    
+    <div id="journal-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Fish Collection</h2>
+            <div id="journal-grid"></div>
+            <button class="close-btn">Close</button>
+        </div>
+    </div>
+    
+    <div id="shop-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Upgrades</h2>
+            <div id="shop-items"></div>
+            <button class="close-btn">Close</button>
+        </div>
+    </div>
+    
+    <div id="summary-modal" class="modal hidden">
+        <div class="modal-content summary">
+            <h2>Run Complete!</h2>
+            <div class="summary-stats">
+                <p>Fish Caught: <span id="summary-fish">0</span></p>
+                <p>Coins Earned: <span id="summary-coins">0</span> 🪙</p>
+                <p>Best Catch: <span id="summary-best">None</span></p>
+            </div>
+            <button class="close-btn">Continue</button>
+        </div>
+    </div>
+    
+    <div id="catch-popup" class="hidden">
+        <div id="catch-content"></div>
+    </div>
+    
+    <div id="bait-popup" class="hidden"></div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
