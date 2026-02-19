@@ -13,10 +13,10 @@ const WATER_TOP = HEIGHT * 0.55;
 const DOCK_RIGHT = WIDTH * 0.35;
 
 const DEPTH_ZONES = {
-    shallow: { name: 'Shallow', color: '#2a5a8a', threshold: 0.2, difficulty: 1, luckMod: 0 },
-    medium: { name: 'Medium', color: '#1a4a7a', threshold: 0.4, difficulty: 1.3, luckMod: 0.05 },
-    deep: { name: 'Deep', color: '#0a3a6a', threshold: 0.6, difficulty: 1.6, luckMod: 0.1 },
-    abyss: { name: 'Abyss', color: '#052a4a', threshold: 1, difficulty: 2, luckMod: 0.15 }
+    shallow: { name: 'Shallow', threshold: 0.2, difficulty: 1, luckMod: 0 },
+    medium: { name: 'Medium', threshold: 0.4, difficulty: 1.3, luckMod: 0.05 },
+    deep: { name: 'Deep', threshold: 0.6, difficulty: 1.6, luckMod: 0.1 },
+    abyss: { name: 'Abyss', threshold: 1, difficulty: 2, luckMod: 0.15 }
 };
 
 const FISH_DATA = [
@@ -47,31 +47,71 @@ const BAIT_TYPES = [
 const PERMANENT_UPGRADES = [
     { id: 'start_bait', name: 'Extra Bait', desc: 'Start with +5 bait', price: 50, maxLevel: 3, effect: 'bait' },
     { id: 'start_luck', name: 'Lucky Start', desc: '+5% base luck', price: 80, maxLevel: 2, effect: 'luck' },
-    { id: 'zone_medium', name: 'Medium Access', desc: 'Unlock medium zone', price: 100, maxLevel: 1, effect: 'zone_medium' },
-    { id: 'zone_deep', name: 'Deep Access', desc: 'Unlock deep zone', price: 200, maxLevel: 1, effect: 'zone_deep' },
-    { id: 'zone_abyss', name: 'Abyss Access', desc: 'Unlock abyss zone', price: 400, maxLevel: 1, effect: 'zone_abyss' },
+    { id: 'zone_medium', name: 'Medium Access', desc: 'Unlock medium zone', price: 500, maxLevel: 1, effect: 'zone_medium' },
+    { id: 'zone_deep', name: 'Deep Access', desc: 'Unlock deep zone', price: 1500, maxLevel: 1, effect: 'zone_deep' },
+    { id: 'zone_abyss', name: 'Abyss Access', desc: 'Unlock abyss zone', price: 3000, maxLevel: 1, effect: 'zone_abyss' },
     { id: 'run_speed', name: 'Quick Hands', desc: '+15% catch window permanently', price: 150, maxLevel: 2, effect: 'run_speed' }
 ];
+
+const COLLECTION_MILESTONES = {
+    common: [10, 25, 50],
+    uncommon: [10, 25, 50],
+    rare: [8, 20, 40],
+    epic: [5, 15, 30],
+    legendary: [3, 10, 20]
+};
+
+const COLLECTION_BONUSES = {
+    common: [0.05, 0.10, 0.20],
+    uncommon: [0.05, 0.10, 0.20],
+    rare: [0.08, 0.15, 0.25],
+    epic: [0.10, 0.20, 0.35],
+    legendary: [0.15, 0.30, 0.50]
+};
+
+const MASTERY_THRESHOLDS = [25, 50, 100];
+const MASTERY_BONUSES = [0.05, 0.10, 0.15];
+
+const ZONE_FISH_POOLS = {
+    shallow: FISH_DATA.filter(f => f.zones.includes('shallow')),
+    medium: FISH_DATA.filter(f => f.zones.includes('medium')),
+    deep: FISH_DATA.filter(f => f.zones.includes('deep')),
+    abyss: FISH_DATA.filter(f => f.zones.includes('abyss'))
+};
+
+const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const RARITY_THRESHOLDS = [0.35, 0.65, 0.85, 0.95, 1.0];
+
+let dom = {};
 
 let gameState = {
     coins: 0,
     collection: {},
+    fishMilestones: {},
     unlockedZones: ['shallow'],
     permanentUpgrades: {},
+    zoneMastery: { shallow: 0, medium: 0, deep: 0, abyss: 0 },
+    seenTensionHint: false,
     
     runActive: false,
     runBait: 10,
     runInventory: { basic: 0, lucky: 0, quick: 0, golden: 0, deep: 0 },
     runStats: { fishCaught: 0, coinsEarned: 0, bestFish: null },
     selectedBait: 'basic',
+    selectedBaitColor: '#fff',
     
     fishingState: 'idle',
-    castTime: 0,
-    catchWindow: 0,
     canCatch: false,
     currentZone: 'shallow',
     baseLuck: 0,
     baseSpeed: 1,
+    
+    tension: {
+        active: false,
+        direction: 0,
+        pullStrength: 0,
+        lineHealth: 100
+    },
     
     time: 0,
     mouseX: 0,
@@ -80,20 +120,64 @@ let gameState = {
     castTargetY: HEIGHT * 0.7,
     castAnimFrame: 0,
     particles: [],
-    ripples: [],
-    sparkles: [],
     clouds: [
         { x: 50, y: 25, w: 40, speed: 0.05 },
         { x: 200, y: 35, w: 35, speed: 0.03 },
         { x: 280, y: 20, w: 30, speed: 0.04 }
-    ]
+    ],
+    bubbles: [],
+    glints: [],
+    fireflies: [],
+    fishShadows: []
 };
 
 function init() {
+    cacheDOM();
     loadGame();
     setupUI();
     setupMouse();
+    initAmbientParticles();
     requestAnimationFrame(gameLoop);
+}
+
+function cacheDOM() {
+    dom = {
+        coinCount: document.getElementById('coin-count'),
+        baitCount: document.getElementById('bait-count'),
+        baitSelect: document.getElementById('bait-select'),
+        catchPopup: document.getElementById('catch-popup'),
+        catchContent: document.getElementById('catch-content'),
+        escapePopup: document.getElementById('escape-popup'),
+        baitPopup: document.getElementById('bait-popup'),
+        runUi: document.getElementById('run-ui'),
+        startRunBtn: document.getElementById('start-run-btn'),
+        journalBtn: document.getElementById('journal-btn'),
+        shopBtn: document.getElementById('shop-btn'),
+        endRunBtn: document.getElementById('end-run-btn'),
+        journalModal: document.getElementById('journal-modal'),
+        shopModal: document.getElementById('shop-modal'),
+        summaryModal: document.getElementById('summary-modal'),
+        journalGrid: document.getElementById('journal-grid'),
+        shopItems: document.getElementById('shop-items'),
+        summaryFish: document.getElementById('summary-fish'),
+        summaryCoins: document.getElementById('summary-coins'),
+        summaryBest: document.getElementById('summary-best')
+    };
+}
+
+function initAmbientParticles() {
+    for (let i = 0; i < 6; i++) {
+        spawnBubble();
+    }
+    for (let i = 0; i < 12; i++) {
+        spawnGlint();
+    }
+    for (let i = 0; i < 8; i++) {
+        spawnFirefly();
+    }
+    for (let i = 0; i < 2; i++) {
+        spawnFishShadow();
+    }
 }
 
 function loadGame() {
@@ -102,8 +186,10 @@ function loadGame() {
         const data = JSON.parse(saved);
         gameState.coins = data.coins || 0;
         gameState.collection = data.collection || {};
-        gameState.unlockedZones = data.unlockedZones || ['shallow'];
+        gameState.fishMilestones = data.fishMilestones || {};
         gameState.permanentUpgrades = data.permanentUpgrades || {};
+        gameState.zoneMastery = data.zoneMastery || { shallow: 0, medium: 0, deep: 0, abyss: 0 };
+        gameState.seenTensionHint = data.seenTensionHint || false;
         
         applyPermanentUpgrades();
     }
@@ -116,6 +202,7 @@ function applyPermanentUpgrades() {
     const startBaitBonus = (gameState.permanentUpgrades['start_bait'] || 0) * 5;
     gameState.runBait = 10 + startBaitBonus;
     
+    gameState.unlockedZones = ['shallow'];
     if (gameState.permanentUpgrades['zone_medium']) gameState.unlockedZones.push('medium');
     if (gameState.permanentUpgrades['zone_deep']) gameState.unlockedZones.push('deep');
     if (gameState.permanentUpgrades['zone_abyss']) gameState.unlockedZones.push('abyss');
@@ -125,8 +212,10 @@ function saveGame() {
     localStorage.setItem('cozyFishingRL', JSON.stringify({
         coins: gameState.coins,
         collection: gameState.collection,
-        unlockedZones: gameState.unlockedZones,
-        permanentUpgrades: gameState.permanentUpgrades
+        fishMilestones: gameState.fishMilestones,
+        permanentUpgrades: gameState.permanentUpgrades,
+        zoneMastery: gameState.zoneMastery,
+        seenTensionHint: gameState.seenTensionHint
     }));
 }
 
@@ -138,9 +227,10 @@ function startRun() {
     const startBaitBonus = (gameState.permanentUpgrades['start_bait'] || 0) * 5;
     gameState.runBait = 10 + startBaitBonus;
     gameState.selectedBait = 'basic';
+    gameState.selectedBaitColor = '#fff';
     
-    document.getElementById('run-ui').classList.remove('hidden');
-    document.getElementById('start-run-btn').classList.add('hidden');
+    dom.runUi.classList.remove('hidden');
+    dom.startRunBtn.classList.add('hidden');
     updateBaitDisplay();
 }
 
@@ -148,26 +238,29 @@ function endRun() {
     gameState.runActive = false;
     gameState.fishingState = 'idle';
     
-    document.getElementById('run-ui').classList.add('hidden');
-    document.getElementById('start-run-btn').classList.remove('hidden');
+    dom.runUi.classList.add('hidden');
+    dom.startRunBtn.classList.remove('hidden');
     
     showRunSummary();
 }
 
 function showRunSummary() {
     const stats = gameState.runStats;
-    document.getElementById('summary-fish').textContent = stats.fishCaught;
-    document.getElementById('summary-coins').textContent = stats.coinsEarned;
-    document.getElementById('summary-best').textContent = stats.bestFish ? `${stats.bestFish.emoji} ${stats.bestFish.name}` : 'None';
-    document.getElementById('summary-modal').classList.remove('hidden');
+    dom.summaryFish.textContent = stats.fishCaught;
+    dom.summaryCoins.textContent = stats.coinsEarned;
+    dom.summaryBest.textContent = stats.bestFish ? `${stats.bestFish.emoji} ${stats.bestFish.name}` : 'None';
+    dom.summaryModal.classList.remove('hidden');
 }
 
 function setupUI() {
-    document.getElementById('journal-btn').onclick = () => openModal('journal');
-    document.getElementById('shop-btn').onclick = () => openModal('shop');
-    document.getElementById('start-run-btn').onclick = () => startRun();
-    document.getElementById('end-run-btn').onclick = () => endRun();
-    document.getElementById('bait-select').onchange = (e) => gameState.selectedBait = e.target.value;
+    dom.journalBtn.onclick = () => openModal('journal');
+    dom.shopBtn.onclick = () => openModal('shop');
+    dom.startRunBtn.onclick = () => startRun();
+    dom.endRunBtn.onclick = () => endRun();
+    dom.baitSelect.onchange = (e) => {
+        gameState.selectedBait = e.target.value;
+        gameState.selectedBaitColor = BAIT_TYPES.find(b => b.id === gameState.selectedBait)?.color || '#fff';
+    };
     
     document.querySelectorAll('.close-btn').forEach(btn => {
         btn.onclick = () => closeModal();
@@ -179,13 +272,13 @@ function setupUI() {
 function setupMouse() {
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
-        gameState.mouseX = (e.clientX - rect.left) / SCALE;
-        gameState.mouseY = (e.clientY - rect.top) / SCALE;
+        gameState.mouseX = Math.max(0, Math.min(WIDTH, (e.clientX - rect.left) / SCALE));
+        gameState.mouseY = Math.max(0, Math.min(HEIGHT, (e.clientY - rect.top) / SCALE));
     });
 }
 
 function openModal(type) {
-    const modal = document.getElementById(type + '-modal');
+    const modal = dom[type + 'Modal'];
     modal.classList.remove('hidden');
     
     if (type === 'journal') renderJournal();
@@ -197,29 +290,45 @@ function closeModal() {
 }
 
 function renderJournal() {
-    const grid = document.getElementById('journal-grid');
-    grid.innerHTML = '';
+    dom.journalGrid.innerHTML = '';
     
     FISH_DATA.forEach(fish => {
         const caught = gameState.collection[fish.id] || 0;
+        const milestones = COLLECTION_MILESTONES[fish.rarity];
+        const currentMilestone = gameState.fishMilestones[fish.id] || 0;
+        
+        let progressHtml = '';
+        if (caught > 0) {
+            let nextMilestone = milestones[currentMilestone];
+            let progress = nextMilestone ? Math.min(caught / nextMilestone * 100, 100) : 100;
+            let milestoneText = currentMilestone >= milestones.length ? 'MAX' : `${caught}/${nextMilestone}`;
+            
+            progressHtml = `
+                <div class="milestone-progress">
+                    <div class="milestone-bar" style="width:${progress}%"></div>
+                </div>
+                <div class="milestone-text">${milestoneText}</div>
+            `;
+        }
+        
         const card = document.createElement('div');
         card.className = 'fish-card' + (caught ? '' : ' uncaught');
         card.innerHTML = `
             <div class="fish-sprite">${fish.emoji}</div>
             <div class="fish-name">${caught ? fish.name : '???'}</div>
             <div class="fish-count">${caught ? `x${caught}` : ''}</div>
+            ${progressHtml}
             <div class="fish-zones">${caught ? fish.zones.join(' ') : ''}</div>
         `;
         if (caught) {
             card.onclick = () => showFishInfo(fish);
         }
-        grid.appendChild(card);
+        dom.journalGrid.appendChild(card);
     });
 }
 
 function renderShop() {
-    const container = document.getElementById('shop-items');
-    container.innerHTML = '<h3 style="margin-bottom:15px;color:#7dd3fc;">Permanent Upgrades</h3>';
+    dom.shopItems.innerHTML = '<h3 style="margin-bottom:15px;color:#7dd3fc;">Permanent Upgrades</h3>';
     
     PERMANENT_UPGRADES.forEach(item => {
         const level = gameState.permanentUpgrades[item.id] || 0;
@@ -242,7 +351,7 @@ function renderShop() {
         if (!maxed) {
             div.querySelector('button').onclick = () => buyPermanentUpgrade(item);
         }
-        container.appendChild(div);
+        dom.shopItems.appendChild(div);
     });
 }
 
@@ -259,7 +368,21 @@ function buyPermanentUpgrade(item) {
 }
 
 function showFishInfo(fish) {
-    alert(`${fish.name}\nRarity: ${fish.rarity}\nValue: ${fish.value} coins\nZones: ${fish.zones.join(', ')}\nTotal caught: ${gameState.collection[fish.id]}`);
+    const caught = gameState.collection[fish.id] || 0;
+    const milestones = COLLECTION_MILESTONES[fish.rarity];
+    const currentMilestone = gameState.fishMilestones[fish.id] || 0;
+    const bonus = getCollectionBonus(fish) * 100;
+    
+    let milestoneStr = '';
+    if (caught > 0) {
+        if (currentMilestone >= milestones.length) {
+            milestoneStr = `\nMilestone: MAX (${milestones[milestones.length - 1]} caught)`;
+        } else {
+            milestoneStr = `\nNext Milestone: ${milestones[currentMilestone]} (${caught}/${milestones[currentMilestone]})`;
+        }
+    }
+    
+    alert(`${fish.name}\nRarity: ${fish.rarity}\nBase Value: ${fish.value} coins\nCurrent Bonus: +${bonus.toFixed(0)}%\nZones: ${fish.zones.join(', ')}\nTotal caught: ${caught}${milestoneStr}`);
 }
 
 function getZoneFromY(y) {
@@ -299,7 +422,15 @@ function handleClick() {
         }
     } else if (gameState.fishingState === 'waiting') {
         if (gameState.canCatch) {
-            catchFish();
+            if (gameState.tension.active) {
+                const clickDirection = mx < gameState.castTargetX ? -1 : 1;
+                const success = handleTensionClick(clickDirection);
+                if (success) {
+                    catchFish();
+                }
+            } else {
+                catchFish();
+            }
         } else {
             gameState.fishingState = 'idle';
         }
@@ -319,38 +450,94 @@ function castLine() {
     } else {
         gameState.runBait--;
         gameState.selectedBait = 'basic';
+        gameState.selectedBaitColor = '#fff';
     }
     
     gameState.fishingState = 'waiting';
-    gameState.castTime = Date.now();
     gameState.castAnimFrame = 0;
     
     updateBaitDisplay();
     
     createSplash(gameState.castTargetX, gameState.castTargetY);
-    createRipple(gameState.castTargetX, gameState.castTargetY);
     
     const zone = DEPTH_ZONES[gameState.currentZone];
     const baseWait = 1500 + Math.random() * 3000;
     const waitTime = baseWait / (1 + zone.difficulty * 0.2);
     
+    const masteryBonus = getMasteryBonus(gameState.currentZone);
     let catchDuration = 800 / gameState.baseSpeed;
+    catchDuration *= (1 + masteryBonus);
     if (gameState.selectedBait === 'quick') catchDuration *= 1.3;
     catchDuration /= zone.difficulty;
     
     setTimeout(() => {
         if (gameState.fishingState === 'waiting') {
             gameState.canCatch = true;
-            gameState.catchWindow = Date.now();
+            
+            if (gameState.currentZone === 'deep' || gameState.currentZone === 'abyss') {
+                startTension();
+            }
             
             setTimeout(() => {
                 if (gameState.fishingState === 'waiting' && gameState.canCatch) {
                     gameState.canCatch = false;
                     gameState.fishingState = 'idle';
+                    gameState.tension.active = false;
+                    showEscapePopup();
                 }
             }, catchDuration);
         }
     }, waitTime);
+}
+
+function startTension() {
+    gameState.tension.active = true;
+    gameState.tension.lineHealth = 100;
+    
+    if (!gameState.seenTensionHint) {
+        gameState.seenTensionHint = true;
+        showTensionHint();
+        saveGame();
+    }
+    
+    const masteryLevel = getMasteryLevel(gameState.currentZone);
+    const masteryReduction = masteryLevel * 0.15;
+    
+    const baseStrength = gameState.currentZone === 'abyss' ? 0.8 : 0.5;
+    gameState.tension.pullStrength = Math.max(0.2, baseStrength - masteryReduction);
+    changeTensionDirection();
+}
+
+function showTensionHint() {
+    dom.baitPopup.innerHTML = `🎣 Fish fighting!<br>Click ← or → to counter!`;
+    dom.baitPopup.classList.remove('hidden');
+    setTimeout(() => dom.baitPopup.classList.add('hidden'), 3000);
+}
+
+function changeTensionDirection() {
+    gameState.tension.direction = Math.random() > 0.5 ? 1 : -1;
+}
+
+function handleTensionClick(direction) {
+    if (!gameState.tension.active) return false;
+    
+    if (direction === gameState.tension.direction) {
+        gameState.tension.lineHealth = Math.min(100, gameState.tension.lineHealth + 15);
+        if (gameState.tension.lineHealth >= 100) {
+            return true;
+        }
+    } else {
+        gameState.tension.lineHealth -= 25;
+        if (gameState.tension.lineHealth <= 0) {
+            gameState.canCatch = false;
+            gameState.fishingState = 'idle';
+            gameState.tension.active = false;
+            showEscapePopup();
+            return false;
+        }
+    }
+    changeTensionDirection();
+    return false;
 }
 
 function catchFish() {
@@ -359,6 +546,10 @@ function catchFish() {
     
     const fish = selectRandomFish();
     let value = fish.value;
+    
+    const collectionBonus = getCollectionBonus(fish);
+    value = Math.floor(value * (1 + collectionBonus));
+    
     if (gameState.selectedBait === 'golden') value = Math.floor(value * 1.5);
     
     gameState.coins += value;
@@ -370,6 +561,9 @@ function catchFish() {
     }
     
     gameState.collection[fish.id] = (gameState.collection[fish.id] || 0) + 1;
+    gameState.zoneMastery[gameState.currentZone]++;
+    
+    checkMilestone(fish);
     
     maybeDropBait();
     
@@ -388,21 +582,110 @@ function catchFish() {
     }, 1500);
 }
 
+function getCollectionBonus(fish) {
+    const milestones = COLLECTION_MILESTONES[fish.rarity];
+    const bonuses = COLLECTION_BONUSES[fish.rarity];
+    const caught = gameState.collection[fish.id] || 0;
+    const currentMilestone = gameState.fishMilestones[fish.id] || 0;
+    
+    let bonus = 0;
+    for (let i = 0; i < milestones.length; i++) {
+        if (caught >= milestones[i]) {
+            bonus = bonuses[i];
+        }
+    }
+    return bonus;
+}
+
+function checkMilestone(fish) {
+    const milestones = COLLECTION_MILESTONES[fish.rarity];
+    const caught = gameState.collection[fish.id];
+    const currentMilestone = gameState.fishMilestones[fish.id] || 0;
+    
+    for (let i = 0; i < milestones.length; i++) {
+        if (caught >= milestones[i] && currentMilestone <= i) {
+            gameState.fishMilestones[fish.id] = i + 1;
+            showMilestonePopup(fish, i + 1);
+            break;
+        }
+    }
+    
+    const zone = gameState.currentZone;
+    const masteryLevel = getMasteryLevel(zone);
+    if (masteryLevel > 0 && gameState.zoneMastery[zone] === MASTERY_THRESHOLDS[masteryLevel - 1]) {
+        showMasteryPopup(zone, masteryLevel);
+    }
+}
+
+function getMasteryLevel(zone) {
+    const catches = gameState.zoneMastery[zone];
+    for (let i = MASTERY_THRESHOLDS.length - 1; i >= 0; i--) {
+        if (catches >= MASTERY_THRESHOLDS[i]) {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+function getMasteryBonus(zone) {
+    const level = getMasteryLevel(zone);
+    return level > 0 ? MASTERY_BONUSES[level - 1] : 0;
+}
+
+function showMilestonePopup(fish, level) {
+    const bonus = COLLECTION_BONUSES[fish.rarity][level - 1] * 100;
+    dom.baitPopup.innerHTML = `🏆 ${fish.name} Milestone ${level}!<br>+${bonus}% value!`;
+    dom.baitPopup.classList.remove('hidden');
+    createCelebrationParticles();
+    setTimeout(() => dom.baitPopup.classList.add('hidden'), 2500);
+}
+
+function showMasteryPopup(zone, level) {
+    const bonus = MASTERY_BONUSES[level - 1] * 100;
+    const zoneName = DEPTH_ZONES[zone].name;
+    dom.baitPopup.innerHTML = `⭐ ${zoneName} Mastery ${level}!<br>+${bonus}% catch window!`;
+    dom.baitPopup.classList.remove('hidden');
+    createCelebrationParticles();
+    setTimeout(() => dom.baitPopup.classList.add('hidden'), 2500);
+}
+
+function createCelebrationParticles() {
+    const centerX = WIDTH / 2;
+    const centerY = WATER_TOP;
+    
+    for (let i = 0; i < 25; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 3;
+        gameState.particles.push({
+            type: 'celebration',
+            x: centerX,
+            y: centerY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2,
+            life: 1,
+            hue: Math.random() * 360
+        });
+    }
+}
+
 function selectRandomFish() {
     const zone = DEPTH_ZONES[gameState.currentZone];
     let luck = gameState.baseLuck + zone.luckMod;
     if (gameState.selectedBait === 'lucky') luck += 0.15;
     
-    const zoneFish = FISH_DATA.filter(f => f.zones.includes(gameState.currentZone));
+    const zoneFish = ZONE_FISH_POOLS[gameState.currentZone];
     
     const roll = Math.random() + luck;
     
-    let pool;
-    if (roll > 0.95) pool = zoneFish.filter(f => f.rarity === 'legendary');
-    else if (roll > 0.85) pool = zoneFish.filter(f => f.rarity === 'epic');
-    else if (roll > 0.65) pool = zoneFish.filter(f => f.rarity === 'rare');
-    else if (roll > 0.35) pool = zoneFish.filter(f => f.rarity === 'uncommon');
-    else pool = zoneFish.filter(f => f.rarity === 'common');
+    let rarityIndex = 0;
+    for (let i = 0; i < RARITY_THRESHOLDS.length; i++) {
+        if (roll > RARITY_THRESHOLDS[i]) {
+            rarityIndex = i + 1;
+        }
+    }
+    
+    const targetRarity = RARITY_ORDER[rarityIndex];
+    const pool = zoneFish.filter(f => f.rarity === targetRarity);
     
     return (pool.length > 0 ? pool : zoneFish)[Math.floor(Math.random() * zoneFish.length)];
 }
@@ -423,43 +706,45 @@ function maybeDropBait() {
 }
 
 function showBaitDrop(bait) {
-    const popup = document.getElementById('bait-popup');
-    popup.innerHTML = `Found: ${bait.name}!`;
-    popup.classList.remove('hidden');
-    setTimeout(() => popup.classList.add('hidden'), 2000);
+    dom.baitPopup.innerHTML = `Found: ${bait.name}!`;
+    dom.baitPopup.classList.remove('hidden');
+    setTimeout(() => dom.baitPopup.classList.add('hidden'), 2000);
 }
 
 function showCatchPopup(fish, value) {
-    const popup = document.getElementById('catch-popup');
     const zone = DEPTH_ZONES[gameState.currentZone];
-    document.getElementById('catch-content').innerHTML = `
+    dom.catchContent.innerHTML = `
         <div class="fish-emoji">${fish.emoji}</div>
         <div class="fish-name">${fish.name}</div>
         <div class="fish-zone">${zone.name}</div>
         <div class="fish-value">+${value} 🪙</div>
     `;
-    popup.classList.remove('hidden');
+    dom.catchPopup.classList.remove('hidden');
 }
 
 function hideCatchPopup() {
-    document.getElementById('catch-popup').classList.add('hidden');
+    dom.catchPopup.classList.add('hidden');
+}
+
+function showEscapePopup() {
+    dom.escapePopup.classList.remove('hidden');
+    setTimeout(() => dom.escapePopup.classList.add('hidden'), 1500);
 }
 
 function updateCoinDisplay() {
-    document.getElementById('coin-count').textContent = gameState.coins;
+    dom.coinCount.textContent = gameState.coins;
 }
 
 function updateBaitDisplay() {
-    document.getElementById('bait-count').textContent = gameState.runBait;
+    dom.baitCount.textContent = gameState.runBait;
     
-    const select = document.getElementById('bait-select');
-    select.innerHTML = `<option value="basic">Basic (${gameState.runBait})</option>`;
+    dom.baitSelect.innerHTML = `<option value="basic">Basic (${gameState.runBait})</option>`;
     
     BAIT_TYPES.forEach(bait => {
         if (bait.id === 'basic') return;
         const count = gameState.runInventory[bait.id] || 0;
         if (count > 0) {
-            select.innerHTML += `<option value="${bait.id}">${bait.name} (${count})</option>`;
+            dom.baitSelect.innerHTML += `<option value="${bait.id}">${bait.name} (${count})</option>`;
         }
     });
 }
@@ -469,6 +754,7 @@ function createSplash(x, y) {
         const angle = (Math.PI / 6) + Math.random() * (Math.PI * 2 / 3);
         const speed = 1 + Math.random() * 2;
         gameState.particles.push({
+            type: 'splash',
             x: x,
             y: y,
             vx: Math.cos(angle) * speed,
@@ -477,48 +763,221 @@ function createSplash(x, y) {
             size: 1 + Math.random() * 2
         });
     }
-}
-
-function createRipple(x, y) {
-    gameState.ripples.push({ x, y, radius: 3, alpha: 1 });
+    gameState.particles.push({
+        type: 'ripple',
+        x, y,
+        radius: 3,
+        alpha: 1
+    });
 }
 
 function createSparkles(x, y) {
     for (let i = 0; i < 15; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 0.5 + Math.random() * 1.5;
-        gameState.sparkles.push({
+        gameState.particles.push({
+            type: 'sparkle',
             x: x,
             y: y,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
             life: 1,
-            color: `hsl(${40 + Math.random() * 40}, 100%, 70%)`
+            hue: 40 + Math.random() * 40
         });
     }
 }
 
+function spawnBubble() {
+    gameState.bubbles.push({
+        x: DOCK_RIGHT + Math.random() * (WIDTH - DOCK_RIGHT - 20) + 10,
+        y: HEIGHT - Math.random() * 20,
+        size: 1 + Math.random() * 2,
+        speed: 0.2 + Math.random() * 0.3,
+        wobble: Math.random() * Math.PI * 2
+    });
+}
+
+function spawnGlint() {
+    gameState.glints.push({
+        x: DOCK_RIGHT + Math.random() * (WIDTH - DOCK_RIGHT - 10),
+        y: WATER_TOP + Math.random() * 5,
+        phase: Math.random() * Math.PI * 2,
+        speed: 1 + Math.random() * 2
+    });
+}
+
+function spawnFirefly() {
+    gameState.fireflies.push({
+        x: Math.random() * WIDTH,
+        y: Math.random() * WATER_TOP * 0.8,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.2,
+        phase: Math.random() * Math.PI * 2,
+        brightness: 0.5 + Math.random() * 0.5
+    });
+}
+
+function spawnFishShadow() {
+    const fromLeft = Math.random() > 0.5;
+    const zone = ['shallow', 'medium', 'deep', 'abyss'][Math.floor(Math.random() * 4)];
+    const zoneThreshold = DEPTH_ZONES[zone].threshold;
+    const waterHeight = HEIGHT - WATER_TOP;
+    
+    gameState.fishShadows.push({
+        x: fromLeft ? DOCK_RIGHT : WIDTH,
+        y: WATER_TOP + waterHeight * (zoneThreshold - 0.1) + Math.random() * 15,
+        size: 4 + Math.random() * 8,
+        speed: (0.5 + Math.random() * 0.5) * (fromLeft ? 1 : -1),
+        alpha: 0.3 + Math.random() * 0.3
+    });
+}
+
 function updateParticles() {
-    gameState.particles = gameState.particles.filter(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.1;
-        p.life -= 0.03;
-        return p.life > 0;
-    });
+    for (let i = gameState.particles.length - 1; i >= 0; i--) {
+        const p = gameState.particles[i];
+        
+        if (p.type === 'splash') {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.1;
+            p.life -= 0.03;
+            if (p.life <= 0) {
+                gameState.particles.splice(i, 1);
+            }
+        } else if (p.type === 'ripple') {
+            p.radius += 0.5;
+            p.alpha -= 0.02;
+            if (p.alpha <= 0) {
+                gameState.particles.splice(i, 1);
+            }
+        } else if (p.type === 'sparkle') {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.02;
+            if (p.life <= 0) {
+                gameState.particles.splice(i, 1);
+            }
+        } else if (p.type === 'celebration') {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.08;
+            p.life -= 0.015;
+            if (p.life <= 0) {
+                gameState.particles.splice(i, 1);
+            }
+        }
+    }
     
-    gameState.ripples = gameState.ripples.filter(r => {
-        r.radius += 0.5;
-        r.alpha -= 0.02;
-        return r.alpha > 0;
-    });
+    for (let i = gameState.bubbles.length - 1; i >= 0; i--) {
+        const b = gameState.bubbles[i];
+        b.y -= b.speed;
+        b.x += Math.sin(gameState.time * 3 + b.wobble) * 0.2;
+        b.wobble += 0.02;
+        if (b.y < WATER_TOP) {
+            gameState.bubbles.splice(i, 1);
+            spawnBubble();
+        }
+    }
     
-    gameState.sparkles = gameState.sparkles.filter(s => {
-        s.x += s.vx;
-        s.y += s.vy;
-        s.life -= 0.02;
-        return s.life > 0;
-    });
+    for (let i = gameState.glints.length - 1; i >= 0; i--) {
+        const g = gameState.glints[i];
+        g.phase += 0.05 * g.speed;
+    }
+    
+    for (let i = gameState.fireflies.length - 1; i >= 0; i--) {
+        const f = gameState.fireflies[i];
+        f.x += f.vx + Math.sin(gameState.time * 2 + f.phase) * 0.1;
+        f.y += f.vy + Math.cos(gameState.time * 1.5 + f.phase) * 0.08;
+        f.phase += 0.03;
+        
+        if (f.x < 0) f.x = WIDTH;
+        if (f.x > WIDTH) f.x = 0;
+        if (f.y < 0) f.y = WATER_TOP * 0.8;
+        if (f.y > WATER_TOP * 0.8) f.y = 0;
+    }
+    
+    for (let i = gameState.fishShadows.length - 1; i >= 0; i--) {
+        const fs = gameState.fishShadows[i];
+        fs.x += fs.speed;
+        
+        if ((fs.speed > 0 && fs.x > WIDTH + 20) || (fs.speed < 0 && fs.x < DOCK_RIGHT - 20)) {
+            gameState.fishShadows.splice(i, 1);
+            if (Math.random() < 0.7) {
+                setTimeout(spawnFishShadow, 2000 + Math.random() * 3000);
+            }
+        }
+    }
+}
+
+function drawParticles() {
+    for (const p of gameState.particles) {
+        if (p.type === 'splash') {
+            ctx.fillStyle = `rgba(150, 200, 255, ${p.life})`;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        } else if (p.type === 'ripple') {
+            ctx.strokeStyle = `rgba(150, 200, 255, ${p.alpha * 0.5})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (p.type === 'sparkle') {
+            ctx.fillStyle = `hsl(${p.hue}, 100%, 70%)`;
+            ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x, p.y, 2, 2);
+        } else if (p.type === 'celebration') {
+            ctx.fillStyle = `hsl(${p.hue}, 100%, 60%)`;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    ctx.globalAlpha = 1;
+    
+    for (const b of gameState.bubbles) {
+        ctx.strokeStyle = `rgba(180, 220, 255, 0.4)`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.fillStyle = `rgba(220, 240, 255, 0.2)`;
+        ctx.beginPath();
+        ctx.arc(b.x - b.size * 0.3, b.y - b.size * 0.3, b.size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    for (const g of gameState.glints) {
+        const alpha = (Math.sin(g.phase) + 1) * 0.25 + 0.1;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.fillRect(g.x, g.y, 1, 1);
+    }
+    
+    for (const f of gameState.fireflies) {
+        const glow = (Math.sin(gameState.time * 4 + f.phase) + 1) * 0.3 * f.brightness;
+        
+        ctx.fillStyle = `rgba(200, 255, 150, ${glow * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = `rgba(255, 255, 200, ${glow})`;
+        ctx.fillRect(f.x, f.y, 1, 1);
+    }
+    
+    for (const fs of gameState.fishShadows) {
+        ctx.fillStyle = `rgba(10, 20, 40, ${fs.alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(fs.x, fs.y, fs.size, fs.size * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.moveTo(fs.x - fs.size * fs.speed * 0.3, fs.y);
+        ctx.lineTo(fs.x - fs.size * 1.3 * fs.speed * 0.3, fs.y - fs.size * 0.3);
+        ctx.lineTo(fs.x - fs.size * 1.3 * fs.speed * 0.3, fs.y + fs.size * 0.3);
+        ctx.closePath();
+        ctx.fill();
+    }
 }
 
 function gameLoop(timestamp) {
@@ -534,6 +993,19 @@ function update() {
         gameState.castAnimFrame = Math.min(gameState.castAnimFrame + 0.15, 3);
     }
     
+    if (gameState.tension.active) {
+        gameState.tension.lineHealth -= gameState.tension.pullStrength;
+        if (gameState.time % 0.5 < 0.02 && Math.random() < 0.3) {
+            changeTensionDirection();
+        }
+        if (gameState.tension.lineHealth <= 0) {
+            gameState.canCatch = false;
+            gameState.fishingState = 'idle';
+            gameState.tension.active = false;
+            showEscapePopup();
+        }
+    }
+    
     gameState.clouds.forEach(c => {
         c.x += c.speed;
         if (c.x > WIDTH + 50) c.x = -c.w;
@@ -543,6 +1015,7 @@ function update() {
 }
 
 function render() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
     drawSky();
     drawClouds();
     drawMountains();
@@ -556,6 +1029,7 @@ function render() {
         drawPlayer();
         drawFishingLine();
         drawStateIndicator();
+        drawTensionUI();
         drawCastCursor();
     }
 }
@@ -690,20 +1164,16 @@ function drawBush(x, y, r) {
 
 function drawWater() {
     const waterHeight = HEIGHT - WATER_TOP;
-    const zoneHeight = waterHeight / 4;
+    const gradient = ctx.createLinearGradient(0, WATER_TOP, 0, HEIGHT);
     
-    let y = WATER_TOP;
-    for (const [zoneId, zone] of Object.entries(DEPTH_ZONES)) {
-        const gradient = ctx.createLinearGradient(0, y, 0, y + zoneHeight);
-        const unlocked = gameState.unlockedZones.includes(zoneId);
-        const baseColor = unlocked ? zone.color : '#0a1520';
-        
-        gradient.addColorStop(0, baseColor);
-        gradient.addColorStop(1, unlocked ? shadeColor(baseColor, -20) : '#050a10');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(DOCK_RIGHT, y, WIDTH - DOCK_RIGHT, zoneHeight + 1);
-        y += zoneHeight;
-    }
+    gradient.addColorStop(0, '#2a5a8a');
+    gradient.addColorStop(0.2, '#1a4a7a');
+    gradient.addColorStop(0.4, '#0a3a6a');
+    gradient.addColorStop(0.6, '#052a4a');
+    gradient.addColorStop(1, '#020810');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(DOCK_RIGHT, WATER_TOP, WIDTH - DOCK_RIGHT, waterHeight);
     
     for (let wave = 0; wave < 6; wave++) {
         ctx.strokeStyle = `rgba(100, 160, 220, ${0.15 - wave * 0.02})`;
@@ -721,15 +1191,6 @@ function drawWater() {
     drawMoonReflection();
 }
 
-function shadeColor(color, percent) {
-    const num = parseInt(color.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.max(0, Math.min(255, (num >> 16) + amt));
-    const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amt));
-    const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
-    return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-}
-
 function drawMoonReflection() {
     ctx.fillStyle = 'rgba(255, 255, 238, 0.08)';
     for (let i = 0; i < 8; i++) {
@@ -745,41 +1206,31 @@ function drawDepthIndicators() {
     ctx.textAlign = 'right';
     
     const waterHeight = HEIGHT - WATER_TOP;
-    const zoneHeight = waterHeight / 4;
+    const zoneOrder = ['shallow', 'medium', 'deep', 'abyss'];
+    const thresholds = [0, 0.2, 0.4, 0.6, 1.0];
     
-    let y = WATER_TOP;
-    for (const [zoneId, zone] of Object.entries(DEPTH_ZONES)) {
+    for (let i = 0; i < zoneOrder.length; i++) {
+        const zoneId = zoneOrder[i];
+        const zone = DEPTH_ZONES[zoneId];
         const unlocked = gameState.unlockedZones.includes(zoneId);
+        const masteryLevel = getMasteryLevel(zoneId);
+        
+        const t0 = thresholds[i];
+        const t1 = thresholds[i + 1];
+        const zoneTop = WATER_TOP + waterHeight * t0;
+        const zoneHeight = waterHeight * (t1 - t0);
+        
         ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.5)' : 'rgba(255,100,100,0.5)';
-        ctx.fillText(zone.name.toUpperCase(), WIDTH - 5, y + zoneHeight / 2 + 3);
+        ctx.fillText(zone.name.toUpperCase(), WIDTH - 5, zoneTop + zoneHeight / 2 + 3);
         
         if (!unlocked) {
-            ctx.fillText('🔒', WIDTH - 50, y + zoneHeight / 2 + 3);
+            ctx.fillText('🔒', WIDTH - 50, zoneTop + zoneHeight / 2 + 3);
+        } else if (masteryLevel > 0) {
+            const stars = '★'.repeat(masteryLevel) + '☆'.repeat(3 - masteryLevel);
+            ctx.fillStyle = 'rgba(255,215,0,0.7)';
+            ctx.fillText(stars, WIDTH - 60, zoneTop + zoneHeight / 2 + 3);
         }
-        y += zoneHeight;
     }
-}
-
-function drawParticles() {
-    gameState.particles.forEach(p => {
-        ctx.fillStyle = `rgba(150, 200, 255, ${p.life})`;
-        ctx.fillRect(p.x, p.y, p.size, p.size);
-    });
-    
-    gameState.ripples.forEach(r => {
-        ctx.strokeStyle = `rgba(150, 200, 255, ${r.alpha * 0.5})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-        ctx.stroke();
-    });
-    
-    gameState.sparkles.forEach(s => {
-        ctx.fillStyle = s.color;
-        ctx.globalAlpha = s.life;
-        ctx.fillRect(s.x, s.y, 2, 2);
-    });
-    ctx.globalAlpha = 1;
 }
 
 function drawDock() {
@@ -946,8 +1397,6 @@ function drawFishingLine() {
     const endX = gameState.castTargetX + Math.sin(gameState.time * 2) * 3;
     const endY = gameState.castTargetY;
     
-    const baitColor = BAIT_TYPES.find(b => b.id === gameState.selectedBait)?.color || '#fff';
-    
     ctx.strokeStyle = 'rgba(180, 180, 180, 0.8)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -960,7 +1409,7 @@ function drawFishingLine() {
     
     const bobberBob = Math.sin(gameState.time * 4) * 1;
     
-    ctx.fillStyle = gameState.selectedBait !== 'basic' ? baitColor : '#ff4444';
+    ctx.fillStyle = gameState.selectedBait !== 'basic' ? gameState.selectedBaitColor : '#ff4444';
     ctx.beginPath();
     ctx.arc(endX, endY + bobberBob, 3, 0, Math.PI * 2);
     ctx.fill();
@@ -977,7 +1426,7 @@ function drawStateIndicator() {
     const x = gameState.castTargetX;
     const y = gameState.castTargetY;
     
-    if (gameState.canCatch) {
+    if (gameState.canCatch && !gameState.tension.active) {
         const pulse = Math.sin(gameState.time * 15) * 0.3 + 0.7;
         ctx.fillStyle = `rgba(255, 255, 100, ${pulse})`;
         ctx.beginPath();
@@ -989,6 +1438,34 @@ function drawStateIndicator() {
         ctx.textAlign = 'center';
         ctx.fillText('!', x, y - 6);
     }
+}
+
+function drawTensionUI() {
+    if (!gameState.tension.active) return;
+    
+    const x = gameState.castTargetX;
+    const y = gameState.castTargetY;
+    
+    const arrowPulse = Math.sin(gameState.time * 8) * 0.3 + 0.7;
+    ctx.fillStyle = `rgba(255, 200, 50, ${arrowPulse})`;
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    
+    const arrow = gameState.tension.direction > 0 ? '→' : '←';
+    ctx.fillText(arrow, x, y - 15);
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - 20, y - 25, 40, 6);
+    
+    const healthWidth = (gameState.tension.lineHealth / 100) * 38;
+    const healthColor = gameState.tension.lineHealth > 60 ? '#44ff44' : 
+                        gameState.tension.lineHealth > 30 ? '#ffaa00' : '#ff4444';
+    ctx.fillStyle = healthColor;
+    ctx.fillRect(x - 19, y - 24, healthWidth, 4);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.font = '6px monospace';
+    ctx.fillText('←  →', x, y - 30);
 }
 
 function drawCastCursor() {
