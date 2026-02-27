@@ -1,13 +1,23 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+const bgCanvas = document.createElement('canvas');
+const bgCtx = bgCanvas.getContext('2d');
+
 const SCALE = 3;
 const WIDTH = 320;
 const HEIGHT = 180;
+
 canvas.width = WIDTH;
 canvas.height = HEIGHT;
 canvas.style.width = WIDTH * SCALE + 'px';
 canvas.style.height = HEIGHT * SCALE + 'px';
+
+bgCanvas.width = WIDTH;
+bgCanvas.height = HEIGHT;
+
+let lastTime = 0;
+let deltaTime = 0;
 
 const WATER_TOP = HEIGHT * 0.55;
 const DOCK_RIGHT = WIDTH * 0.35;
@@ -137,6 +147,7 @@ function init() {
     setupUI();
     setupMouse();
     initAmbientParticles();
+    renderBackground();
     requestAnimationFrame(gameLoop);
 }
 
@@ -161,8 +172,132 @@ function cacheDOM() {
         shopItems: document.getElementById('shop-items'),
         summaryFish: document.getElementById('summary-fish'),
         summaryCoins: document.getElementById('summary-coins'),
-        summaryBest: document.getElementById('summary-best')
+        summaryBest: document.getElementById('summary-best'),
+        hookUi: document.getElementById('hook-ui'),
+        hookBtn: document.getElementById('hook-btn')
     };
+}
+
+function renderBackground() {
+    bgCtx.clearRect(0, 0, WIDTH, HEIGHT);
+    
+    // Static Sky
+    const gradient = bgCtx.createLinearGradient(0, 0, 0, HEIGHT * 0.6);
+    gradient.addColorStop(0, '#0d1b2a');
+    gradient.addColorStop(0.5, '#1b263b');
+    gradient.addColorStop(1, '#415a77');
+    bgCtx.fillStyle = gradient;
+    bgCtx.fillRect(0, 0, WIDTH, HEIGHT * 0.6);
+    
+    // Moon
+    bgCtx.fillStyle = '#ffffee';
+    bgCtx.beginPath();
+    bgCtx.arc(260, 30, 18, 0, Math.PI * 2);
+    bgCtx.fill();
+    bgCtx.fillStyle = '#415a77';
+    bgCtx.beginPath();
+    bgCtx.arc(268, 26, 14, 0, Math.PI * 2);
+    bgCtx.fill();
+    
+    // Mountains
+    bgCtx.fillStyle = '#1a2d40';
+    bgCtx.beginPath();
+    bgCtx.moveTo(0, WATER_TOP);
+    bgCtx.lineTo(40, WATER_TOP - 35);
+    bgCtx.lineTo(80, WATER_TOP - 15);
+    bgCtx.lineTo(120, WATER_TOP - 50);
+    bgCtx.lineTo(160, WATER_TOP - 25);
+    bgCtx.lineTo(200, WATER_TOP - 60);
+    bgCtx.lineTo(250, WATER_TOP - 30);
+    bgCtx.lineTo(300, WATER_TOP - 45);
+    bgCtx.lineTo(WIDTH, WATER_TOP - 20);
+    bgCtx.lineTo(WIDTH, WATER_TOP);
+    bgCtx.closePath();
+    bgCtx.fill();
+    
+    bgCtx.fillStyle = '#152238';
+    bgCtx.beginPath();
+    bgCtx.moveTo(0, WATER_TOP);
+    bgCtx.lineTo(30, WATER_TOP - 25);
+    bgCtx.lineTo(70, WATER_TOP - 10);
+    bgCtx.lineTo(100, WATER_TOP - 35);
+    bgCtx.lineTo(140, WATER_TOP - 15);
+    bgCtx.lineTo(180, WATER_TOP - 40);
+    bgCtx.lineTo(220, WATER_TOP - 20);
+    bgCtx.lineTo(270, WATER_TOP - 30);
+    bgCtx.lineTo(WIDTH, WATER_TOP - 10);
+    bgCtx.lineTo(WIDTH, WATER_TOP);
+    bgCtx.closePath();
+    bgCtx.fill();
+    
+    // Static trees
+    drawPineTree(bgCtx, 8, WATER_TOP - 5, 20, 30);
+    drawPineTree(bgCtx, 25, WATER_TOP - 3, 15, 22);
+    drawBush(bgCtx, WIDTH * 0.36, WATER_TOP - 2, 8);
+    
+    // Dock
+    bgCtx.fillStyle = '#5c4033';
+    bgCtx.fillRect(0, WATER_TOP, DOCK_RIGHT, 10);
+    bgCtx.strokeStyle = '#4a3020';
+    bgCtx.lineWidth = 1;
+    for (let i = 0; i < DOCK_RIGHT; i += 8) {
+        bgCtx.beginPath();
+        bgCtx.moveTo(i, WATER_TOP);
+        bgCtx.lineTo(i, WATER_TOP + 10);
+        bgCtx.stroke();
+    }
+    for (let j = 0; j < 10; j += 3) {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, WATER_TOP + j);
+        bgCtx.lineTo(DOCK_RIGHT, WATER_TOP + j);
+        bgCtx.stroke();
+    }
+    bgCtx.fillStyle = '#3d2817';
+    for (let i = 0; i < 6; i++) {
+        const px = i * 18 + 4;
+        bgCtx.fillRect(px, WATER_TOP + 10, 5, 28);
+        bgCtx.fillStyle = '#2d1a10';
+        bgCtx.fillRect(px, WATER_TOP + 10, 1, 28);
+        bgCtx.fillStyle = '#3d2817';
+    }
+}
+
+function setupUI() {
+    dom.journalBtn.onclick = () => openModal('journal');
+    dom.shopBtn.onclick = () => openModal('shop');
+    dom.startRunBtn.onclick = () => startRun();
+    dom.endRunBtn.onclick = () => endRun();
+    dom.baitSelect.onchange = (e) => {
+        gameState.selectedBait = e.target.value;
+        gameState.selectedBaitColor = BAIT_TYPES.find(b => b.id === gameState.selectedBait)?.color || '#fff';
+    };
+    dom.hookBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (gameState.canCatch) {
+            if (gameState.tension.active) {
+                // Tension handling is still via left/right clicks for now
+                // but we can make Hook button start the tension minigame or finish it
+                handleHookClick();
+            } else {
+                catchFish();
+            }
+        }
+    };
+    
+    document.querySelectorAll('.close-btn').forEach(btn => {
+        btn.onclick = () => closeModal();
+    });
+    
+    canvas.onclick = handleClick;
+}
+
+function handleHookClick() {
+    if (gameState.tension.active) {
+        // In tension mode, clicking Hook could give a small boost
+        gameState.tension.lineHealth = Math.min(100, gameState.tension.lineHealth + 5);
+    } else {
+        catchFish();
+    }
 }
 
 function initAmbientParticles() {
@@ -237,6 +372,7 @@ function startRun() {
 function endRun() {
     gameState.runActive = false;
     gameState.fishingState = 'idle';
+    dom.hookUi.classList.add('hidden');
     
     dom.runUi.classList.add('hidden');
     dom.startRunBtn.classList.remove('hidden');
@@ -250,23 +386,6 @@ function showRunSummary() {
     dom.summaryCoins.textContent = stats.coinsEarned;
     dom.summaryBest.textContent = stats.bestFish ? `${stats.bestFish.emoji} ${stats.bestFish.name}` : 'None';
     dom.summaryModal.classList.remove('hidden');
-}
-
-function setupUI() {
-    dom.journalBtn.onclick = () => openModal('journal');
-    dom.shopBtn.onclick = () => openModal('shop');
-    dom.startRunBtn.onclick = () => startRun();
-    dom.endRunBtn.onclick = () => endRun();
-    dom.baitSelect.onchange = (e) => {
-        gameState.selectedBait = e.target.value;
-        gameState.selectedBaitColor = BAIT_TYPES.find(b => b.id === gameState.selectedBait)?.color || '#fff';
-    };
-    
-    document.querySelectorAll('.close-btn').forEach(btn => {
-        btn.onclick = () => closeModal();
-    });
-    
-    canvas.onclick = handleClick;
 }
 
 function setupMouse() {
@@ -473,6 +592,7 @@ function castLine() {
     setTimeout(() => {
         if (gameState.fishingState === 'waiting') {
             gameState.canCatch = true;
+            dom.hookUi.classList.remove('hidden');
             
             if (gameState.currentZone === 'deep' || gameState.currentZone === 'abyss') {
                 startTension();
@@ -483,6 +603,7 @@ function castLine() {
                     gameState.canCatch = false;
                     gameState.fishingState = 'idle';
                     gameState.tension.active = false;
+                    dom.hookUi.classList.add('hidden');
                     showEscapePopup();
                 }
             }, catchDuration);
@@ -543,6 +664,7 @@ function handleTensionClick(direction) {
 function catchFish() {
     gameState.canCatch = false;
     gameState.fishingState = 'reeling';
+    dom.hookUi.classList.add('hidden');
     
     const fish = selectRandomFish();
     let value = fish.value;
@@ -832,36 +954,37 @@ function spawnFishShadow() {
     });
 }
 
-function updateParticles() {
+function updateParticles(dt) {
+    const f = 60 * dt;
     for (let i = gameState.particles.length - 1; i >= 0; i--) {
         const p = gameState.particles[i];
         
         if (p.type === 'splash') {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.1;
-            p.life -= 0.03;
+            p.x += p.vx * f;
+            p.y += p.vy * f;
+            p.vy += 0.1 * f;
+            p.life -= 0.03 * f;
             if (p.life <= 0) {
                 gameState.particles.splice(i, 1);
             }
         } else if (p.type === 'ripple') {
-            p.radius += 0.5;
-            p.alpha -= 0.02;
+            p.radius += 0.5 * f;
+            p.alpha -= 0.02 * f;
             if (p.alpha <= 0) {
                 gameState.particles.splice(i, 1);
             }
         } else if (p.type === 'sparkle') {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.life -= 0.02;
+            p.x += p.vx * f;
+            p.y += p.vy * f;
+            p.life -= 0.02 * f;
             if (p.life <= 0) {
                 gameState.particles.splice(i, 1);
             }
         } else if (p.type === 'celebration') {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.08;
-            p.life -= 0.015;
+            p.x += p.vx * f;
+            p.y += p.vy * f;
+            p.vy += 0.08 * f;
+            p.life -= 0.015 * f;
             if (p.life <= 0) {
                 gameState.particles.splice(i, 1);
             }
@@ -870,9 +993,9 @@ function updateParticles() {
     
     for (let i = gameState.bubbles.length - 1; i >= 0; i--) {
         const b = gameState.bubbles[i];
-        b.y -= b.speed;
-        b.x += Math.sin(gameState.time * 3 + b.wobble) * 0.2;
-        b.wobble += 0.02;
+        b.y -= b.speed * f;
+        b.x += Math.sin(gameState.time * 3 + b.wobble) * 0.2 * f;
+        b.wobble += 0.02 * f;
         if (b.y < WATER_TOP) {
             gameState.bubbles.splice(i, 1);
             spawnBubble();
@@ -881,24 +1004,24 @@ function updateParticles() {
     
     for (let i = gameState.glints.length - 1; i >= 0; i--) {
         const g = gameState.glints[i];
-        g.phase += 0.05 * g.speed;
+        g.phase += 0.05 * g.speed * f;
     }
     
     for (let i = gameState.fireflies.length - 1; i >= 0; i--) {
-        const f = gameState.fireflies[i];
-        f.x += f.vx + Math.sin(gameState.time * 2 + f.phase) * 0.1;
-        f.y += f.vy + Math.cos(gameState.time * 1.5 + f.phase) * 0.08;
-        f.phase += 0.03;
+        const f_p = gameState.fireflies[i];
+        f_p.x += (f_p.vx + Math.sin(gameState.time * 2 + f_p.phase) * 0.1) * f;
+        f_p.y += (f_p.vy + Math.cos(gameState.time * 1.5 + f_p.phase) * 0.08) * f;
+        f_p.phase += 0.03 * f;
         
-        if (f.x < 0) f.x = WIDTH;
-        if (f.x > WIDTH) f.x = 0;
-        if (f.y < 0) f.y = WATER_TOP * 0.8;
-        if (f.y > WATER_TOP * 0.8) f.y = 0;
+        if (f_p.x < 0) f_p.x = WIDTH;
+        if (f_p.x > WIDTH) f_p.x = 0;
+        if (f_p.y < 0) f_p.y = WATER_TOP * 0.8;
+        if (f_p.y > WATER_TOP * 0.8) f_p.y = 0;
     }
     
     for (let i = gameState.fishShadows.length - 1; i >= 0; i--) {
         const fs = gameState.fishShadows[i];
-        fs.x += fs.speed;
+        fs.x += fs.speed * f;
         
         if ((fs.speed > 0 && fs.x > WIDTH + 20) || (fs.speed < 0 && fs.x < DOCK_RIGHT - 20)) {
             gameState.fishShadows.splice(i, 1);
@@ -981,20 +1104,25 @@ function drawParticles() {
 }
 
 function gameLoop(timestamp) {
+    deltaTime = (timestamp - lastTime) / 1000;
+    if (deltaTime > 0.1) deltaTime = 0.016; // Cap delta time to avoid huge jumps
+    lastTime = timestamp;
+    
     update();
     render();
     requestAnimationFrame(gameLoop);
 }
 
 function update() {
-    gameState.time += 0.016;
+    const dt = deltaTime;
+    gameState.time += dt;
     
     if (gameState.fishingState === 'waiting' || gameState.fishingState === 'reeling') {
-        gameState.castAnimFrame = Math.min(gameState.castAnimFrame + 0.15, 3);
+        gameState.castAnimFrame = Math.min(gameState.castAnimFrame + 9 * dt, 3);
     }
     
     if (gameState.tension.active) {
-        gameState.tension.lineHealth -= gameState.tension.pullStrength;
+        gameState.tension.lineHealth -= gameState.tension.pullStrength * 60 * dt;
         if (gameState.time % 0.5 < 0.02 && Math.random() < 0.3) {
             changeTensionDirection();
         }
@@ -1002,28 +1130,38 @@ function update() {
             gameState.canCatch = false;
             gameState.fishingState = 'idle';
             gameState.tension.active = false;
+            dom.hookUi.classList.add('hidden');
             showEscapePopup();
         }
     }
     
     gameState.clouds.forEach(c => {
-        c.x += c.speed;
+        c.x += c.speed * 60 * dt;
         if (c.x > WIDTH + 50) c.x = -c.w;
     });
     
-    updateParticles();
+    updateParticles(dt);
 }
 
 function render() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    drawSky();
+    
+    // Draw pre-rendered background
+    ctx.drawImage(bgCanvas, 0, 0);
+    
+    // Static elements that need twinkle/glow
+    drawStars();
+    drawMoonGlow();
+    
     drawClouds();
-    drawMountains();
-    drawTrees();
     drawWater();
     drawDepthIndicators();
     drawParticles();
-    drawDock();
+    
+    // Dynamic parts of the dock
+    drawLadder();
+    drawBarrel();
+    drawLanterns();
     
     if (gameState.runActive) {
         drawPlayer();
@@ -1034,16 +1172,11 @@ function render() {
     }
 }
 
-function drawSky() {
-    const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT * 0.6);
-    gradient.addColorStop(0, '#0d1b2a');
-    gradient.addColorStop(0.5, '#1b263b');
-    gradient.addColorStop(1, '#415a77');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT * 0.6);
-    
-    drawStars();
-    drawMoon();
+function drawMoonGlow() {
+    ctx.fillStyle = 'rgba(255, 255, 238, 0.15)';
+    ctx.beginPath();
+    ctx.arc(260, 30, 30, 0, Math.PI * 2);
+    ctx.fill();
 }
 
 function drawStars() {
@@ -1058,17 +1191,7 @@ function drawStars() {
     ctx.globalAlpha = 1;
 }
 
-function drawMoon() {
-    ctx.fillStyle = '#ffffee';
-    ctx.beginPath();
-    ctx.arc(260, 30, 18, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillStyle = '#415a77';
-    ctx.beginPath();
-    ctx.arc(268, 26, 14, 0, Math.PI * 2);
-    ctx.fill();
-    
+function drawMoonGlow() {
     ctx.fillStyle = 'rgba(255, 255, 238, 0.15)';
     ctx.beginPath();
     ctx.arc(260, 30, 30, 0, Math.PI * 2);
@@ -1095,45 +1218,13 @@ function drawCloud(x, y, w) {
     ctx.fill();
 }
 
-function drawMountains() {
-    ctx.fillStyle = '#1a2d40';
-    ctx.beginPath();
-    ctx.moveTo(0, WATER_TOP);
-    ctx.lineTo(40, WATER_TOP - 35);
-    ctx.lineTo(80, WATER_TOP - 15);
-    ctx.lineTo(120, WATER_TOP - 50);
-    ctx.lineTo(160, WATER_TOP - 25);
-    ctx.lineTo(200, WATER_TOP - 60);
-    ctx.lineTo(250, WATER_TOP - 30);
-    ctx.lineTo(300, WATER_TOP - 45);
-    ctx.lineTo(WIDTH, WATER_TOP - 20);
-    ctx.lineTo(WIDTH, WATER_TOP);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.fillStyle = '#152238';
-    ctx.beginPath();
-    ctx.moveTo(0, WATER_TOP);
-    ctx.lineTo(30, WATER_TOP - 25);
-    ctx.lineTo(70, WATER_TOP - 10);
-    ctx.lineTo(100, WATER_TOP - 35);
-    ctx.lineTo(140, WATER_TOP - 15);
-    ctx.lineTo(180, WATER_TOP - 40);
-    ctx.lineTo(220, WATER_TOP - 20);
-    ctx.lineTo(270, WATER_TOP - 30);
-    ctx.lineTo(WIDTH, WATER_TOP - 10);
-    ctx.lineTo(WIDTH, WATER_TOP);
-    ctx.closePath();
-    ctx.fill();
-}
-
 function drawTrees() {
-    drawPineTree(8, WATER_TOP - 5, 20, 30);
-    drawPineTree(25, WATER_TOP - 3, 15, 22);
-    drawBush(WIDTH * 0.36, WATER_TOP - 2, 8);
+    drawPineTree(ctx, 8, WATER_TOP - 5, 20, 30);
+    drawPineTree(ctx, 25, WATER_TOP - 3, 15, 22);
+    drawBush(ctx, WIDTH * 0.36, WATER_TOP - 2, 8);
 }
 
-function drawPineTree(x, baseY, w, h) {
+function drawPineTree(ctx, x, baseY, w, h) {
     ctx.fillStyle = '#2d3a24';
     for (let layer = 0; layer < 3; layer++) {
         const layerY = baseY - h * 0.3 * layer;
@@ -1152,7 +1243,7 @@ function drawPineTree(x, baseY, w, h) {
     ctx.fillRect(x - 1, baseY - 3, 2, 5);
 }
 
-function drawBush(x, y, r) {
+function drawBush(ctx, x, y, r) {
     ctx.fillStyle = '#2a4030';
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -1231,39 +1322,6 @@ function drawDepthIndicators() {
             ctx.fillText(stars, WIDTH - 60, zoneTop + zoneHeight / 2 + 3);
         }
     }
-}
-
-function drawDock() {
-    ctx.fillStyle = '#5c4033';
-    ctx.fillRect(0, WATER_TOP, DOCK_RIGHT, 10);
-    
-    ctx.strokeStyle = '#4a3020';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < DOCK_RIGHT; i += 8) {
-        ctx.beginPath();
-        ctx.moveTo(i, WATER_TOP);
-        ctx.lineTo(i, WATER_TOP + 10);
-        ctx.stroke();
-    }
-    for (let j = 0; j < 10; j += 3) {
-        ctx.beginPath();
-        ctx.moveTo(0, WATER_TOP + j);
-        ctx.lineTo(DOCK_RIGHT, WATER_TOP + j);
-        ctx.stroke();
-    }
-    
-    ctx.fillStyle = '#3d2817';
-    for (let i = 0; i < 6; i++) {
-        const px = i * 18 + 4;
-        ctx.fillRect(px, WATER_TOP + 10, 5, 28);
-        ctx.fillStyle = '#2d1a10';
-        ctx.fillRect(px, WATER_TOP + 10, 1, 28);
-        ctx.fillStyle = '#3d2817';
-    }
-    
-    drawLadder();
-    drawBarrel();
-    drawLanterns();
 }
 
 function drawLadder() {

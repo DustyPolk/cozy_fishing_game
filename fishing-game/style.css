@@ -383,6 +383,33 @@ button:hover {
     text-align: center;
 }
 
+#hook-ui {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 100;
+}
+
+#hook-ui.hidden {
+    display: none;
+}
+
+#hook-btn {
+    background: #ff4444;
+    border: 4px solid #fff;
+    font-size: 24px;
+    padding: 15px 30px;
+    border-radius: 50px;
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+    animation: pulse 0.5s infinite alternate;
+}
+
+@keyframes pulse {
+    from { transform: scale(1); }
+    to { transform: scale(1.1); }
+}
+
 .fish-card .milestone-progress {
     width: 100%;
     height: 4px;
